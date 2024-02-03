@@ -2,7 +2,7 @@ use axum::{
     extract::Path,
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use redis::Commands;
@@ -27,7 +27,8 @@ async fn main() {
         .route("/health", get(health_handler))
         .route("/users", get(list_users_handler))
         .route("/users/:id", get(retrieve_user_handler))
-        .route("/users", post(create_user_handler));
+        .route("/users", post(create_user_handler))
+        .route("/users/:id", delete(delete_user_handler));
 
     let listener_url =
         std::env::var("LISTENER_URL").unwrap_or_else(|_| String::from("127.0.0.1:8080"));
@@ -74,6 +75,26 @@ async fn create_user_handler(Json(payload): Json<CreateUser>) -> impl IntoRespon
     (StatusCode::CREATED, Json(user))
 }
 
+async fn delete_user_handler(Path(id): Path<String>) -> impl IntoResponse {
+    match delete_user(id) {
+        Ok(_) => (StatusCode::NO_CONTENT, Json(json!(""))),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to delete user"})),
+        ),
+    }
+}
+
+fn list_users() -> redis::RedisResult<Vec<User>> {
+    let mut conn = create_redis_connection();
+    let users: Vec<String> = conn.hvals("users")?;
+
+    Ok(users
+        .iter()
+        .map(|user| serde_json::from_str(user).unwrap())
+        .collect())
+}
+
 fn retrieve_user(id: String) -> redis::RedisResult<Option<User>> {
     let mut conn = create_redis_connection();
     let user: Option<String> = conn.hget("users", id)?;
@@ -90,14 +111,10 @@ fn store_user(user: &User) -> redis::RedisResult<()> {
     Ok(())
 }
 
-fn list_users() -> redis::RedisResult<Vec<User>> {
+fn delete_user(id: String) -> redis::RedisResult<()> {
     let mut conn = create_redis_connection();
-    let users: Vec<String> = conn.hvals("users")?;
-
-    Ok(users
-        .iter()
-        .map(|user| serde_json::from_str(user).unwrap())
-        .collect())
+    conn.hdel("users", id)?;
+    Ok(())
 }
 
 fn create_redis_connection() -> redis::Connection {
