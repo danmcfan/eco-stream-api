@@ -4,11 +4,12 @@ WORKDIR /usr/src/eco-stream
 
 COPY . .
 
+RUN apt-get update && apt-get install -y pkg-config && rm -rf /var/lib/apt/lists/*
+
 RUN cargo install --path .
 
 FROM debian:bullseye-slim
 
-# RUN apt-get update && apt-get install -y EXTRA_DEPENDENCY && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/cargo/bin/eco-stream /usr/local/bin/eco-stream
 
