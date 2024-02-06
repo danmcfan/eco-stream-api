@@ -1,23 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: redis
+  name: minio
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: redis
+      app: minio
   template:
     metadata:
       labels:
-        app: redis
+        app: minio
     spec:
       containers:
-      - name: redis
-        image: redis:alpine
-        args: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+      - name: minio
+        image: quay.io/minio/minio:latest
+        args: ["server", "/data", "--console-address", ":9001"]
         ports:
-        - containerPort: 6379
+        - containerPort: 9000
+        - containerPort: 9001
         volumeMounts:
         - mountPath: /data
           name: localvolume
@@ -26,17 +27,21 @@ spec:
       volumes:
       - name: localvolume
         hostPath:
-          path: /mnt/redis/data
+          path: /mnt/minio/data
           type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis
+  name: minio
 spec:
   ports:
-  - port: 6379
-    targetPort: 6379
+  - name: api
+    port: 9000
+    targetPort: 9000
+  - name: console
+    port: 9001
+    targetPort: 9001
   selector:
-    app: redis
+    app: minio
   type: ClusterIP
