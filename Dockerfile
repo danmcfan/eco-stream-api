@@ -1,17 +1,13 @@
-FROM rust:1.75.0-slim-bullseye as builder
+FROM golang:1.22
 
-WORKDIR /usr/src/eco-stream
+WORKDIR /src
 
-COPY . .
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
 
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+COPY ./cmd ./cmd
+COPY ./internal ./internal
 
-RUN cargo install --path .
+RUN go build -v -o ./bin/server ./cmd/server/main.go
 
-FROM debian:bullseye-slim
-
-COPY --from=builder /usr/local/cargo/bin/eco-stream /usr/local/bin/eco-stream
-
-EXPOSE 80
-
-CMD ["eco-stream"]
+CMD ["./bin/server"]
