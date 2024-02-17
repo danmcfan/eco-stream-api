@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sort"
 
 	"github.com/go-redis/redis/v8"
 
@@ -41,6 +42,12 @@ func ListUsers(client *redis.Client) ([]models.User, error) {
 		}
 		users = append(users, user)
 	}
+
+	// Sort users by username
+	sort.Slice(users, func(i, j int) bool {
+		return users[i].Username < users[j].Username
+	})
+
 	return users, nil
 }
 

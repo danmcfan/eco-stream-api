@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/minio/minio-go"
 
-	"github.com/danmcfan/eco-stream/internal/auth"
+	"github.com/danmcfan/eco-stream/internal/middleware"
 	internalMinio "github.com/danmcfan/eco-stream/internal/minio"
 	"github.com/danmcfan/eco-stream/internal/models"
 	internalRedis "github.com/danmcfan/eco-stream/internal/redis"
@@ -31,14 +31,14 @@ func UserHandlers(rdb *redis.Client) func(w http.ResponseWriter, r *http.Request
 		case http.MethodGet:
 			id := strings.TrimPrefix(r.URL.Path, "/users/")
 			if id == "" {
-				listUsersHandler(rdb)(w, r)
+				middleware.CorsMiddleware(listUsersHandler(rdb))(w, r)
 			} else {
 				retrieveUserHandler(rdb)(w, r)
 			}
 		case http.MethodPost:
-			auth.Auth(createUserHandler(rdb))(w, r)
+			middleware.AuthMiddleware(createUserHandler(rdb))(w, r)
 		case http.MethodDelete:
-			auth.Auth(deleteUserHandler(rdb))(w, r)
+			middleware.AuthMiddleware(deleteUserHandler(rdb))(w, r)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
