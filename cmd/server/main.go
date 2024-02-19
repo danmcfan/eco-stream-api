@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/danmcfan/eco-stream/internal/handlers"
+	"github.com/danmcfan/eco-stream/internal/middleware"
 	"github.com/danmcfan/eco-stream/internal/minio"
 	"github.com/danmcfan/eco-stream/internal/redis"
 )
@@ -18,7 +19,7 @@ func main() {
 	minio.CreateBucket(minioClient, "default", "us-east-1")
 
 	http.HandleFunc("/health/", handlers.HealthCheckHandler)
-	http.HandleFunc("/users/", handlers.UserHandlers(rdb))
+	http.HandleFunc("/users/", middleware.CorsMiddleware(handlers.UserHandlers(rdb)))
 	http.HandleFunc("/files/", handlers.FileHandlers(minioClient))
 
 	listenerURL := "localhost:8080"
