@@ -36,6 +36,8 @@ func UserHandlers(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 			} else {
 				retrieveUserHandler(db)(w, r)
 			}
+		case http.MethodPut:
+			updateUserHandler(db)(w, r)
 		case http.MethodPost:
 			createUserHandler(db)(w, r)
 		case http.MethodDelete:
@@ -98,12 +100,44 @@ func createUserHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) 
 		newUser := models.User{
 			ID:       uuid.New().String(),
 			Username: user.Username,
+			IsActive: true,
 		}
 		if err := postgres.StoreUser(db, &newUser); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		jsonResponse, err := json.Marshal(newUser)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		w.Write(jsonResponse)
+	}
+}
+
+func updateUserHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("{ handler: UPDATE_USER, addr: %s }", r.RemoteAddr)
+		id := strings.TrimPrefix(r.URL.Path, "/users/")
+		var updateUser models.UpdateUser
+		if err := json.NewDecoder(r.Body).Decode(&updateUser); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		user := models.User{
+			ID:       id,
+			Username: updateUser.Username,
+			IsActive: updateUser.IsActive,
+		}
+		if err := postgres.UpdateUser(db, &user); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		jsonResponse, err := json.Marshal(user)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

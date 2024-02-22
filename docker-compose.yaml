@@ -21,7 +21,6 @@ services:
   db:
     image: postgres:alpine
     volumes:
-      - pg-data:/var/lib/postgresql/data/pgdata
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
       PGDATA: /var/lib/postgresql/data/pgdata
@@ -41,15 +40,9 @@ services:
   minio:
     image: quay.io/minio/minio:latest
     command: server /data --console-address ":9001"
-    volumes:
-      - minio-data:/data
     expose:
       - 9000
       - 9001
     ports:
       - 9000:9000
       - 9001:9001
-
-volumes:
-  pg-data:
-  minio-data:

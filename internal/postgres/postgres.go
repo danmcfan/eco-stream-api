@@ -25,7 +25,7 @@ func CreatePostgresClient() *sql.DB {
 }
 
 func ListUsers(db *sql.DB) ([]models.User, error) {
-	rows, err := db.Query("SELECT id, username FROM users")
+	rows, err := db.Query("SELECT id, username, isActive FROM users ORDER BY id ASC")
 	if err != nil {
 		log.Fatalf("Failed to retrieve users: %v", err)
 		return nil, err
@@ -35,7 +35,7 @@ func ListUsers(db *sql.DB) ([]models.User, error) {
 	users := make([]models.User, 0)
 	for rows.Next() {
 		var user models.User
-		if err := rows.Scan(&user.ID, &user.Username); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &user.IsActive); err != nil {
 			log.Fatalf("Failed to retrieve users: %v", err)
 			return nil, err
 		}
@@ -52,7 +52,7 @@ func ListUsers(db *sql.DB) ([]models.User, error) {
 
 func RetrieveUser(db *sql.DB, id string) (*models.User, error) {
 	var user models.User
-	err := db.QueryRow("SELECT id, username FROM users WHERE id = $1", id).Scan(&user.ID, &user.Username)
+	err := db.QueryRow("SELECT id, username, isActive FROM users WHERE id = $1", id).Scan(&user.ID, &user.Username, &user.IsActive)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
@@ -64,7 +64,12 @@ func RetrieveUser(db *sql.DB, id string) (*models.User, error) {
 }
 
 func StoreUser(db *sql.DB, user *models.User) error {
-	_, err := db.Exec("INSERT INTO users (id, username) VALUES ($1, $2)", user.ID, user.Username)
+	_, err := db.Exec("INSERT INTO users (id, username, isActive) VALUES ($1, $2, $3)", user.ID, user.Username, user.IsActive)
+	return err
+}
+
+func UpdateUser(db *sql.DB, user *models.User) error {
+	_, err := db.Exec("UPDATE users SET username = $1, isActive = $2 WHERE id = $3", user.Username, user.IsActive, user.ID)
 	return err
 }
 
