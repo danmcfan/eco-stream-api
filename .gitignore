@@ -1,4 +1,8 @@
+.vscode/
+
 /bin
 /data
 
 .env
+
+db.session.sql

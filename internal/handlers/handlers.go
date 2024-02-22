@@ -1,22 +1,24 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/minio/minio-go"
 
 	internalMinio "github.com/danmcfan/eco-stream/internal/minio"
 	"github.com/danmcfan/eco-stream/internal/models"
-	internalRedis "github.com/danmcfan/eco-stream/internal/redis"
+	"github.com/danmcfan/eco-stream/internal/postgres"
 )
 
 func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("{ handler: HEALTH, addr: %s }", r.RemoteAddr)
 	if r.Method != "GET" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -24,29 +26,30 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "All systems operational!")
 }
 
-func UserHandlers(rdb *redis.Client) func(w http.ResponseWriter, r *http.Request) {
+func UserHandlers(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			id := strings.TrimPrefix(r.URL.Path, "/users/")
 			if id == "" {
-				listUsersHandler(rdb)(w, r)
+				listUsersHandler(db)(w, r)
 			} else {
-				retrieveUserHandler(rdb)(w, r)
+				retrieveUserHandler(db)(w, r)
 			}
 		case http.MethodPost:
-			createUserHandler(rdb)(w, r)
+			createUserHandler(db)(w, r)
 		case http.MethodDelete:
-			deleteUserHandler(rdb)(w, r)
+			deleteUserHandler(db)(w, r)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	}
 }
 
-func listUsersHandler(rdb *redis.Client) func(w http.ResponseWriter, r *http.Request) {
+func listUsersHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		users, err := internalRedis.ListUsers(rdb)
+		log.Printf("{ handler: LIST_USERS, addr: %s }", r.RemoteAddr)
+		users, err := postgres.ListUsers(db)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -61,10 +64,11 @@ func listUsersHandler(rdb *redis.Client) func(w http.ResponseWriter, r *http.Req
 	}
 }
 
-func retrieveUserHandler(rdb *redis.Client) func(w http.ResponseWriter, r *http.Request) {
+func retrieveUserHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("{ handler: RETRIEVE_USER, addr: %s }", r.RemoteAddr)
 		id := strings.TrimPrefix(r.URL.Path, "/users/")
-		user, err := internalRedis.RetrieveUser(rdb, id)
+		user, err := postgres.RetrieveUser(db, id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -83,8 +87,9 @@ func retrieveUserHandler(rdb *redis.Client) func(w http.ResponseWriter, r *http.
 	}
 }
 
-func createUserHandler(rdb *redis.Client) func(w http.ResponseWriter, r *http.Request) {
+func createUserHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("{ handler: CREATE_USER, addr: %s }", r.RemoteAddr)
 		var user models.CreateUser
 		if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -94,7 +99,7 @@ func createUserHandler(rdb *redis.Client) func(w http.ResponseWriter, r *http.Re
 			ID:       uuid.New().String(),
 			Username: user.Username,
 		}
-		if err := internalRedis.StoreUser(rdb, &newUser); err != nil {
+		if err := postgres.StoreUser(db, &newUser); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -109,10 +114,11 @@ func createUserHandler(rdb *redis.Client) func(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func deleteUserHandler(rdb *redis.Client) func(w http.ResponseWriter, r *http.Request) {
+func deleteUserHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("{ handler: DELETE_USER, addr: %s }", r.RemoteAddr)
 		id := strings.TrimPrefix(r.URL.Path, "/users/")
-		if err := internalRedis.DeleteUser(rdb, id); err != nil {
+		if err := postgres.DeleteUser(db, id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -135,6 +141,7 @@ func FileHandlers(minioClient *minio.Client) func(w http.ResponseWriter, r *http
 
 func downloadFileHandler(minioClient *minio.Client) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("{ handler: DOWNLOAD_FILE, addr: %s }", r.RemoteAddr)
 		bucketName := "default"
 		objectName := strings.TrimPrefix(r.URL.Path, "/files/")
 		object := internalMinio.DownloadFile(minioClient, bucketName, objectName)
@@ -149,8 +156,8 @@ func downloadFileHandler(minioClient *minio.Client) func(w http.ResponseWriter, 
 
 func uploadFileHandler(minioClient *minio.Client) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("{ handler: UPLOAD_FILE, addr: %s }", r.RemoteAddr)
 		bucketName := "default"
-
 		reader, fileHeaders, err := r.FormFile("file")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

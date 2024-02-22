@@ -8,18 +8,18 @@ import (
 	"github.com/danmcfan/eco-stream/internal/handlers"
 	"github.com/danmcfan/eco-stream/internal/middleware"
 	"github.com/danmcfan/eco-stream/internal/minio"
-	"github.com/danmcfan/eco-stream/internal/redis"
+	"github.com/danmcfan/eco-stream/internal/postgres"
 )
 
 func main() {
-	rdb := redis.CreateRedisClient()
-	defer rdb.Close()
+	db := postgres.CreatePostgresClient()
+	defer db.Close()
 
 	minioClient := minio.CreateMinioClient()
 	minio.CreateBucket(minioClient, "default", "us-east-1")
 
 	http.HandleFunc("/health/", handlers.HealthCheckHandler)
-	http.HandleFunc("/users/", middleware.CorsMiddleware(handlers.UserHandlers(rdb)))
+	http.HandleFunc("/users/", middleware.CorsMiddleware(handlers.UserHandlers(db)))
 	http.HandleFunc("/files/", handlers.FileHandlers(minioClient))
 
 	listenerURL := "localhost:8080"
