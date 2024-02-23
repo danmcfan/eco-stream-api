@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/minio/minio-go"
 
+	"github.com/danmcfan/eco-stream/internal/jwt"
 	internalMinio "github.com/danmcfan/eco-stream/internal/minio"
 	"github.com/danmcfan/eco-stream/internal/models"
 	"github.com/danmcfan/eco-stream/internal/postgres"
@@ -26,37 +27,88 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "All systems operational!")
 }
 
-func UserHandlers(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+func LoginHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("{ handler: LOGIN, addr: %s }", r.RemoteAddr)
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var user models.LoginUser
+	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if user.Username != "admin" || user.Password != "admin" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	tokenString, err := jwt.CreateToken(user.Username)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse, err := json.Marshal(models.Token{Token: tokenString})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResponse)
+}
+
+func AuthenticateHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("{ handler: AUTHENTICATE, addr: %s }", r.RemoteAddr)
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	_, err := jwt.AuthenticateUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func ItemHandlers(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			id := strings.TrimPrefix(r.URL.Path, "/users/")
-			if id == "" {
-				listUsersHandler(db)(w, r)
-			} else {
-				retrieveUserHandler(db)(w, r)
-			}
+			listItemsHandler(db)(w, r)
 		case http.MethodPut:
-			updateUserHandler(db)(w, r)
+			updateItemHandler(db)(w, r)
 		case http.MethodPost:
-			createUserHandler(db)(w, r)
+			createItemHandler(db)(w, r)
 		case http.MethodDelete:
-			deleteUserHandler(db)(w, r)
+			deleteItemHandler(db)(w, r)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	}
 }
 
-func listUsersHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+func listItemsHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("{ handler: LIST_USERS, addr: %s }", r.RemoteAddr)
-		users, err := postgres.ListUsers(db)
+		log.Printf("{ handler: LIST_ITEMS, addr: %s }", r.RemoteAddr)
+		username, err := jwt.AuthenticateUser(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		items, err := postgres.ListItems(db, username)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		jsonResponse, err := json.Marshal(users)
+		jsonResponse, err := json.Marshal(items)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -66,96 +118,105 @@ func listUsersHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func retrieveUserHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+func createItemHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("{ handler: RETRIEVE_USER, addr: %s }", r.RemoteAddr)
-		id := strings.TrimPrefix(r.URL.Path, "/users/")
-		user, err := postgres.RetrieveUser(db, id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if user == nil {
-			http.Error(w, "User not found", http.StatusNotFound)
-			return
-		}
-		jsonResponse, err := json.Marshal(user)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(jsonResponse)
-	}
-}
+		log.Printf("{ handler: CREATE_ITEM, addr: %s }", r.RemoteAddr)
 
-func createUserHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("{ handler: CREATE_USER, addr: %s }", r.RemoteAddr)
-		var user models.CreateUser
-		if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+		username, err := jwt.AuthenticateUser(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		user, err := postgres.RetrieveUserByUsername(db, username)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		var item models.CreateItem
+		if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		newUser := models.User{
-			ID:       uuid.New().String(),
-			Username: user.Username,
-			IsActive: true,
+		newItem := models.Item{
+			ID:     uuid.New().String(),
+			Name:   item.Name,
+			Count:  0,
+			UserID: user.ID,
 		}
-		if err := postgres.StoreUser(db, &newUser); err != nil {
+		if err := postgres.StoreItem(db, &newItem); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		jsonResponse, err := json.Marshal(newUser)
+
+		jsonResponse, err := json.Marshal(newItem)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		w.Write(jsonResponse)
 	}
 }
 
-func updateUserHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+func updateItemHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("{ handler: UPDATE_USER, addr: %s }", r.RemoteAddr)
-		id := strings.TrimPrefix(r.URL.Path, "/users/")
-		var updateUser models.UpdateUser
-		if err := json.NewDecoder(r.Body).Decode(&updateUser); err != nil {
+		log.Printf("{ handler: UPDATE_ITEM, addr: %s }", r.RemoteAddr)
+
+		id := strings.TrimPrefix(r.URL.Path, "/items/")
+		var updateItem models.UpdateItem
+		if err := json.NewDecoder(r.Body).Decode(&updateItem); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
-		user := models.User{
-			ID:       id,
-			Username: updateUser.Username,
-			IsActive: updateUser.IsActive,
+		_, err := jwt.AuthenticateUser(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
 		}
-		if err := postgres.UpdateUser(db, &user); err != nil {
+
+		item := models.Item{
+			ID:     id,
+			Name:   updateItem.Name,
+			Count:  updateItem.Count,
+			UserID: "",
+		}
+		if err := postgres.UpdateItem(db, &item); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		jsonResponse, err := json.Marshal(user)
+		jsonResponse, err := json.Marshal(item)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		w.Write(jsonResponse)
 	}
 }
 
-func deleteUserHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
+func deleteItemHandler(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("{ handler: DELETE_USER, addr: %s }", r.RemoteAddr)
-		id := strings.TrimPrefix(r.URL.Path, "/users/")
-		if err := postgres.DeleteUser(db, id); err != nil {
+
+		id := strings.TrimPrefix(r.URL.Path, "/items/")
+		_, err := jwt.AuthenticateUser(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		if err := postgres.DeleteItem(db, id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

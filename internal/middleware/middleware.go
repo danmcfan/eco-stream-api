@@ -1,26 +1,8 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
-	"os"
 )
-
-func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	secretToken := "TOKEN"
-	if val, ok := os.LookupEnv("TOKEN"); ok {
-		secretToken = val
-	}
-
-	return func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
-		if token != fmt.Sprintf("Bearer %s", secretToken) {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	}
-}
 
 func CorsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

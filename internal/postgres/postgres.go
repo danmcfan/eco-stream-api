@@ -24,38 +24,12 @@ func CreatePostgresClient() *sql.DB {
 	return db
 }
 
-func ListUsers(db *sql.DB) ([]models.User, error) {
-	rows, err := db.Query("SELECT id, username, isActive FROM users ORDER BY id ASC")
-	if err != nil {
-		log.Fatalf("Failed to retrieve users: %v", err)
-		return nil, err
-	}
-	defer rows.Close()
+func RetrieveUserByUsername(db *sql.DB, username string) (*models.User, error) {
+	query := "SELECT id, username, password, isActive FROM users WHERE username = $1"
+	row := db.QueryRow(query, username)
 
-	users := make([]models.User, 0)
-	for rows.Next() {
-		var user models.User
-		if err := rows.Scan(&user.ID, &user.Username, &user.IsActive); err != nil {
-			log.Fatalf("Failed to retrieve users: %v", err)
-			return nil, err
-		}
-		users = append(users, user)
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Fatalf("Failed to retrieve users: %v", err)
-		return nil, err
-	}
-
-	return users, nil
-}
-
-func RetrieveUser(db *sql.DB, id string) (*models.User, error) {
 	var user models.User
-	err := db.QueryRow("SELECT id, username, isActive FROM users WHERE id = $1", id).Scan(&user.ID, &user.Username, &user.IsActive)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	} else if err != nil {
+	if err := row.Scan(&user.ID, &user.Username, &user.Password, &user.IsActive); err != nil {
 		log.Fatalf("Failed to retrieve user: %v", err)
 		return nil, err
 	}
@@ -63,17 +37,52 @@ func RetrieveUser(db *sql.DB, id string) (*models.User, error) {
 	return &user, nil
 }
 
-func StoreUser(db *sql.DB, user *models.User) error {
-	_, err := db.Exec("INSERT INTO users (id, username, isActive) VALUES ($1, $2, $3)", user.ID, user.Username, user.IsActive)
+func ListItems(db *sql.DB, username string) ([]models.Item, error) {
+	query := `
+        SELECT items.id, items.name, items.count, items.userId
+        FROM items
+        JOIN users
+            ON items.userId = users.id
+        WHERE users.username = $1
+        ORDER BY items.id ASC
+    `
+
+	rows, err := db.Query(query, username)
+	if err != nil {
+		log.Fatalf("Failed to retrieve users: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]models.Item, 0)
+	for rows.Next() {
+		var item models.Item
+		if err := rows.Scan(&item.ID, &item.Name, &item.Count, &item.UserID); err != nil {
+			log.Fatalf("Failed to retrieve users: %v", err)
+			return nil, err
+		}
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatalf("Failed to retrieve users: %v", err)
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func StoreItem(db *sql.DB, item *models.Item) error {
+	_, err := db.Exec("INSERT INTO items (id, name, count, userId) VALUES ($1, $2, $3, $4)", item.ID, item.Name, item.Count, item.UserID)
 	return err
 }
 
-func UpdateUser(db *sql.DB, user *models.User) error {
-	_, err := db.Exec("UPDATE users SET username = $1, isActive = $2 WHERE id = $3", user.Username, user.IsActive, user.ID)
+func UpdateItem(db *sql.DB, item *models.Item) error {
+	_, err := db.Exec("UPDATE items SET name = $1, count = $2 WHERE id = $3", item.Name, item.Count, item.ID)
 	return err
 }
 
-func DeleteUser(db *sql.DB, id string) error {
-	_, err := db.Exec("DELETE FROM users WHERE id = $1", id)
+func DeleteItem(db *sql.DB, id string) error {
+	_, err := db.Exec("DELETE FROM items WHERE id = $1", id)
 	return err
 }

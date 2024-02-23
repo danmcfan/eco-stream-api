@@ -19,9 +19,11 @@ func main() {
 
 	minio.CreateBucket(minioClient, "default", "us-east-1")
 
-	http.HandleFunc("/health/", handlers.HealthCheckHandler)
-	http.HandleFunc("/users/", middleware.CorsMiddleware(handlers.UserHandlers(db)))
-	http.HandleFunc("/files/", handlers.FileHandlers(minioClient))
+	http.HandleFunc("/health/", middleware.CorsMiddleware(handlers.HealthCheckHandler))
+	http.HandleFunc("/login/", middleware.CorsMiddleware(handlers.LoginHandler))
+	http.HandleFunc("/authenticate/", middleware.CorsMiddleware(handlers.AuthenticateHandler))
+	http.HandleFunc("/items/", middleware.CorsMiddleware(handlers.ItemHandlers(db)))
+	http.HandleFunc("/files/", middleware.CorsMiddleware(handlers.FileHandlers(minioClient)))
 
 	listenerURL := "localhost:8080"
 	if val, ok := os.LookupEnv("LISTENER_URL"); ok {
