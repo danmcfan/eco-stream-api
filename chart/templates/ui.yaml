@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui
+  labels:
+    app: ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ui
+  template:
+    metadata:
+      labels:
+        app: ui
+    spec:
+      containers:
+      - name: eco-stream
+        image: ghcr.io/danmcfan/eco-stream-ui:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PUBLIC_API_URL
+          value: "https://api.eco-stream.danny-obrien.com"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui
+spec:
+  selector:
+    app: ui
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP
