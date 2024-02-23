@@ -16,6 +16,7 @@ func main() {
 	defer db.Close()
 
 	minioClient := minio.CreateMinioClient()
+
 	minio.CreateBucket(minioClient, "default", "us-east-1")
 
 	http.HandleFunc("/health/", handlers.HealthCheckHandler)

@@ -22,15 +22,10 @@ spec:
         env:
         - name: LISTENER_URL
           value: "0.0.0.0:80"
-        - name: TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: eco-stream
-              key: auth-token
         - name: MINIO_URL
           value: "minio:9000"
         - name: POSTGRES_URL
-          value: "postgres://postgres:password@postgres:5432/postgres"
+          value: "postgres://postgres:password@postgres:5432/postgres?sslmode=disable"
 ---
 apiVersion: v1
 kind: Service

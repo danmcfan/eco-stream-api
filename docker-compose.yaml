@@ -20,8 +20,6 @@ services:
 
   db:
     image: postgres:alpine
-    volumes:
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
       PGDATA: /var/lib/postgresql/data/pgdata
       POSTGRES_USER: postgres
